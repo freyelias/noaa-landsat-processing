@@ -1,5 +1,5 @@
 # noaa-snow-maps
-Extending snow maps back to 1972 with NOAA satellites. including Very High Resolution Radiometer (VHRR).
+Extending snow maps back to 1972 with NOAA Very High Resolution Radiometer (VHRR) sensor providing VIS (0.52-0.72) and IR (10.5-12.5) bands. 
 
 
 #### Files:
