@@ -1,30 +1,40 @@
 # Title: Script for NOAA and Landsat-1 preprocessing
 # Author: Elias Frey
-# Date: 15.04.23
+# Date: 27.04.23
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2023 RSGB/UniBe (Remote Sensing Research Group, University of Bern)
+#
+#
 # Description: This script processes NOAA and Landsat-1 scenes;
-#              NOAA: Convert to TIF and reassign proper NOAA Polar Stereographic Projection, output as TIF
-#              Landsat: Re-projection into NOAA Polar Stereographic Projection, output as TIF
+#              NOAA: Convert to TIF and reassign proper NOAA Polar Stereographic Projection, output as .TIF file
+#              Landsat: Re-projection into NOAA Polar Stereographic Projection, output as .TIF file
 
 import os
-from pathlib import PurePath
+import sys
+from pathlib import PurePath, Path
 import rasterio
 from rasterio.crs import CRS
 import rioxarray
 import pyproj
 from pyproj import CRS
 ########################################################################################################################
-# USER INPUT: #
-
-# Choose satellites to process
-process_noaa = True  # True: noaa TIFs will be created; False: no noaa processing
-process_landsat = True  # True: landsat re-projection will be created; False: no landsat processing
-
-# Adjust path to data
-data_path = 'C:\\Users\\efrey\\Desktop\\TEST_PATH'
-
+# USER INFORMATION #
+#
+# File:                 preprocessing.py
+# Synopsis:             python preprocessing.py process_noaa[yes/no] process_landsat[yes/no] main_data_path[C:\Users\..]
+#                       Example:
+#                       python preprocessing.py yes yes C:\Users\efrey\Desktop\data
+#
+#
+# Folder structure:    Main folder\NOAA\input\film\"NOAA year folders"
+#                      Main folder\Landsat\input\"Landsat scene folders"
+#                      Example:
+#                      C:\Users\efrey\Desktop\data\NOAA\input\film\1973_03
+#                      C:\Users\efrey\Desktop\data\Landsat\input\LM01_L1TP_037022_19730130_20200909_02_T2
+#
 ########################################################################################################################
-noaa_data_path = os.path.join(data_path, 'NOAA')
-landsat_data_path = os.path.join(data_path, 'Landsat')
+# SCRIPT CODE: #
 
 
 def create_dir(input_scene, satellite):
@@ -46,8 +56,40 @@ def create_dir(input_scene, satellite):
         print('Satellite type unknown.. did you mean noaa or landsat?')
 
 
+def convert_to_tif(input_noaa):
+    """ Convert NOAA netCDF to raster TIF file """
+    if 'VIS' in os.path.basename(input_noaa):
+        # Open and select index where "vis_norm_remapped" is located and drop "band" dimension
+        noaa_nc = rioxarray.open_rasterio(input_noaa, mask_and_scale=True)[2].drop_dims('band')
+        noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
+        noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
+        noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].rio.write_nodata(255, inplace=True)  # assign nodata
+        noaa_nc.attrs['valid_max'] = 255  # Correct noaa max valid attribute
+        assert noaa_nc['vis_norm_remapped'].rio.nodata == 255
+        # Mask NOAA VIS band with flags, set nan values to 255 and change dtype to uint8
+        noaa_vis = noaa_nc['vis_norm_remapped'].where(noaa_nc['flag_remapped'] == 0).fillna(255).astype(dtype='uint8')
+        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-4] + "_Conv.TIF")
+        noaa_vis.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
+
+    elif 'IRday' in os.path.basename(input_noaa):
+        # Open and select index where "calibrated_longwave_flux" is located and drop "band" dimension
+        noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
+        noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
+        noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
+        noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].rio.write_nodata(32767, inplace=True)
+        noaa_nc.attrs['valid_max'] = 20000  # Correct noaa max valid attribute
+        assert noaa_nc['calibrated_longwave_flux'].rio.nodata == 32767
+        # Mask NOAA IR band with flags, set nan values to 255 and change dtype to uint8
+        noaa_ir = noaa_nc['calibrated_longwave_flux'].where(
+            noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='int16')
+        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-4] + "_Conv.TIF")
+        noaa_ir.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
+    else:
+        print(f'Error in function "convert_to_tif": VIS or IRday not found in filename: {os.path.basename(input_noaa)}')
+
+
 def reproject_landsat(input_landsat):
-    """ Reproject Landsat-1 to NOAA Polar Stereographic """
+    """ Reproject Landsat-1 to NOAA Polar Stereographic with proj4string"""
     # Create a pyproj CRS object from proj4string (proj4string according to NOAA documentation)
     p_crs = pyproj.CRS("+proj=stere +lat_0=90 +lon_0=-80.0 +lat_ts=90 +x_0=0 +y_0=0 +ellps=sphere +units=m +R=6371128")
     noaa_crs = CRS.from_wkt(p_crs.to_wkt())
@@ -87,38 +129,6 @@ def mask_landsat(input_landsat):
     ls_masked.rio.to_raster(output_landsat)
 
 
-def convert_to_tif(input_noaa):
-    """ Convert NOAA netCDF to raster TIF file """
-    if 'VIS' in os.path.basename(input_noaa):
-        # Open and select index where "vis_norm_remapped" is located and drop "band" dimension
-        noaa_nc = rioxarray.open_rasterio(input_noaa, mask_and_scale=True)[2].drop_dims('band')
-        noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
-        noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].rio.write_nodata(255, inplace=True)  # assign nodata
-        noaa_nc.attrs['valid_max'] = 255  # Correct noaa max valid attribute
-        assert noaa_nc['vis_norm_remapped'].rio.nodata == 255
-        # Mask NOAA VIS band with flags, set nan values to 255 and change dtype to uint8
-        noaa_vis = noaa_nc['vis_norm_remapped'].where(noaa_nc['flag_remapped'] == 0).fillna(255).astype(dtype='uint8')
-        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-4] + "_Conv.TIF")
-        noaa_vis.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
-
-    # @ TODO same for IR
-    elif 'IRday' in os.path.basename(input_noaa):
-        # Open and select index where "calibrated_longwave_flux" is located and drop "band" dimension
-        noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
-        noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
-        noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].rio.write_nodata(32767, inplace=True)  # assign nodata
-        noaa_nc.attrs['valid_max'] = 20000  # Correct noaa max valid attribute
-        assert noaa_nc['calibrated_longwave_flux'].rio.nodata == 32767
-        # Mask NOAA IR band with flags, set nan values to 255 and change dtype to uint8
-        noaa_ir = noaa_nc['calibrated_longwave_flux'].where(noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='int16')
-        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-4] + "_Conv.TIF")
-        noaa_ir.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
-    else:
-        print(f'Error in function "convert_to_tif": VIS or IRday not found in filename: {os.path.basename(input_noaa)}')
-
-
 def noaa_processing():
     """ Main NOAA processing function """
     # Check and list folders
@@ -126,14 +136,14 @@ def noaa_processing():
     folders = [os.path.join(root, d) for d in dirs]
     for folder in folders:
         # Check and list files
-        print(folder)
         root, dirs, files = next(os.walk(folder, topdown=True))
         scenes = [os.path.join(root, s) for s in files if '.nc' in s]
         for scene in scenes:
-            print(scene)
+            print(f'Processing NOAA scene:')
+            print(f'{scene}')
             # Apply noaa converting function on each scene
             convert_to_tif(scene)
-            print(f'NOAA scene {scene} successfully converted to netCDF')
+            print(f'Successfully finished scene!')
     print(f'NOAA processing finished!')
 
 
@@ -144,13 +154,12 @@ def landsat_processing():
     folders = [os.path.join(root, d) for d in dirs]
     for folder in folders:
         # Check and list files
-        print(folder)
         root, dirs, files = next(os.walk(folder, topdown=True))
         scenes = [os.path.join(root, s) for s in files if '.TIF' in s]
         scenes[0], scenes[5] = scenes[5], scenes[0]
-        print(scenes)
         for scene in scenes:
-            print(scene)
+            print(f'Processing Landsat-1 scene:')
+            print(f'{scene}')
             # Apply landsat re-projecting function on each scene
             reproject_landsat(scene)
             # Mask only band data
@@ -158,17 +167,34 @@ def landsat_processing():
                 # Apply landsat QA (reprojected) masking function on each scene
                 mask_landsat(scene)
             # create_dir(scene, 'landsat')
-            print(f'Landsat-1 scene {scene} successfully converted to netCDF')
+            print(f'Successfully finished scene!')
     print('Landsat-1 processing finished!')
 
 
 if __name__ == '__main__':
-    if process_noaa and process_landsat:
+    try:
+        # Check if user input is correct (synopsis in description)
+        print('Pre-processing script for NOAA and Landsat-1 scenes.')
+        process_noaa = sys.argv[1]
+        process_landsat = sys.argv[2]
+        data_path = Path(sys.argv[3])
+        # Define NOAA and Landsat paths
+        noaa_data_path = os.path.join(data_path, 'NOAA')
+        landsat_data_path = os.path.join(data_path, 'Landsat')
+
+    except IndexError:
+        print('INPUT ERROR: process_NOAA, process_landsat and main data path as commandline arguments')
+        sys.exit(1)
+
+    if 'y' in process_noaa and 'y' in process_landsat:
         noaa_processing()
         landsat_processing()
-    elif process_noaa and not process_landsat:
+    elif 'y' in process_noaa and 'n' in process_landsat:
         noaa_processing()
-    elif process_landsat and not process_noaa:
+    elif 'y' in process_landsat and 'n' in process_noaa:
         landsat_processing()
     else:
-        print(f'Nothing to process with: process_noaa = {process_noaa} and process_landsat = {process_landsat} ...')
+        print(f'Nothing to process with: process_noaa = {process_noaa} and process_landsat = {process_landsat} ... '
+              f'Input ["yes" or "y"] for yes or ["no" or "n"] for no.')
+
+    print('Script done!')
