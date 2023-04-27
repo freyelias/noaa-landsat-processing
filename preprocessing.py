@@ -60,16 +60,17 @@ def convert_to_tif(input_noaa):
     """ Convert NOAA netCDF to raster TIF file """
     if 'VIS' in os.path.basename(input_noaa):
         # Open and select index where "vis_norm_remapped" is located and drop "band" dimension
-        noaa_nc = rioxarray.open_rasterio(input_noaa, mask_and_scale=True)[2].drop_dims('band')
+        noaa_nc = rioxarray.open_rasterio(input_noaa)[2].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
         noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].rio.write_nodata(255, inplace=True)  # assign nodata
-        noaa_nc.attrs['valid_max'] = 255  # Correct noaa max valid attribute
-        assert noaa_nc['vis_norm_remapped'].rio.nodata == 255
+        noaa_nc['vis_norm_remapped'].attrs['valid_max'] = 255  # Correct noaa max valid attribute
         # Mask NOAA VIS band with flags, set nan values to 255 and change dtype to uint8
-        noaa_vis = noaa_nc['vis_norm_remapped'].where(noaa_nc['flag_remapped'] == 0).fillna(255).astype(dtype='uint8')
-        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-4] + "_Conv.TIF")
-        noaa_vis.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
+        noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].where(
+            noaa_nc['flag_remapped'] == 0).fillna(255).astype(dtype='uint8')
+        noaa_nc = noaa_nc.drop_vars('flag_remapped')
+        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-3] + "_Conv.TIF")
+        noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
 
     elif 'IRday' in os.path.basename(input_noaa):
         # Open and select index where "calibrated_longwave_flux" is located and drop "band" dimension
@@ -77,13 +78,13 @@ def convert_to_tif(input_noaa):
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
         noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].rio.write_nodata(32767, inplace=True)
-        noaa_nc.attrs['valid_max'] = 20000  # Correct noaa max valid attribute
-        assert noaa_nc['calibrated_longwave_flux'].rio.nodata == 32767
+        noaa_nc['calibrated_longwave_flux'].attrs['valid_max'] = 2000  # Correct noaa max valid attribute
         # Mask NOAA IR band with flags, set nan values to 255 and change dtype to uint8
-        noaa_ir = noaa_nc['calibrated_longwave_flux'].where(
+        noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].where(
             noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='int16')
-        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-4] + "_Conv.TIF")
-        noaa_ir.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
+        noaa_nc = noaa_nc.drop_vars(['flag_remapped', 'OLR_longwave_flux', 'IR_count_remapped'])
+        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-3] + "_Conv.TIF")
+        noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
     else:
         print(f'Error in function "convert_to_tif": VIS or IRday not found in filename: {os.path.basename(input_noaa)}')
 
@@ -140,7 +141,7 @@ def noaa_processing():
         scenes = [os.path.join(root, s) for s in files if '.nc' in s]
         for scene in scenes:
             print(f'Processing NOAA scene:')
-            print(f'{scene}')
+            print(f'{os.path.basename(scene)}')
             # Apply noaa converting function on each scene
             convert_to_tif(scene)
             print(f'Successfully finished scene!')
@@ -159,7 +160,7 @@ def landsat_processing():
         scenes[0], scenes[5] = scenes[5], scenes[0]
         for scene in scenes:
             print(f'Processing Landsat-1 scene:')
-            print(f'{scene}')
+            print(f'{os.path.basename(scene)}')
             # Apply landsat re-projecting function on each scene
             reproject_landsat(scene)
             # Mask only band data
