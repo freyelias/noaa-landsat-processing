@@ -16,7 +16,7 @@
 # File:                 preprocessing.py
 # Synopsis:             python preprocessing.py process_noaa[yes/no] process_landsat[yes/no] main_data_path[C:\Users\..]
 #                       Example:
-#                       python preprocessing.py yes yes C:\Users\efrey\Desktop\data
+#                       python preprocessing.py yes yes C:\Users\efrey\Desktop\main_folder
 #
 # Folder structure:    Main folder\NOAA\input\film\"NOAA year folders"
 #                      Main folder\Landsat\input\"Landsat scene folders"
