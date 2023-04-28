@@ -34,6 +34,7 @@ import time
 from pathlib import PurePath, Path
 import rasterio
 from rasterio.crs import CRS
+import warnings
 import rioxarray
 import pyproj
 from pyproj import CRS
@@ -61,8 +62,11 @@ def create_dir(input_scene, satellite):
 def convert_to_tif(input_noaa):
     """ Convert NOAA netCDF to raster TIF file """
     if 'VIS' in os.path.basename(input_noaa):
-        # Open and select index where "vis_norm_remapped" is located and drop "band" dimension
-        noaa_nc = rioxarray.open_rasterio(input_noaa)[2].drop_dims('band')
+        # Ignore rasterio NotGeoreferencedWarning when opening raw NOAA netCDF file
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # Open and select index where "vis_norm_remapped" is located and drop "band" dimension
+            noaa_nc = rioxarray.open_rasterio(input_noaa)[2].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
         noaa_nc['vis_norm_remapped'].attrs['valid_min'] = 1  # Correct noaa max valid attribute
@@ -76,8 +80,11 @@ def convert_to_tif(input_noaa):
         noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
 
     elif 'IRday' in os.path.basename(input_noaa):
-        # Open and select index where "calibrated_longwave_flux" is located and drop "band" dimension
-        noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
+        # Ignore rasterio NotGeoreferencedWarning when opening raw NOAA netCDF file
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # Open and select index where "calibrated_longwave_flux" is located and drop "band" dimension
+            noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
         noaa_nc['calibrated_longwave_flux'].attrs['valid_max'] = 2000  # Correct noaa max valid attribute
@@ -197,6 +204,11 @@ if __name__ == '__main__':
     except IndexError:
         print('INPUT ERROR: process_NOAA, process_landsat and main data path as commandline arguments')
         sys.exit(1)
+
+    # ... and suppress errors
+    #gdal.PushErrorHandler('CPLQuietErrorHandler')
+    #log = logging.getLogger()
+    #log.setLevel(logging.DEBUG)
 
     if 'y' in process_noaa and 'y' in process_landsat:
         noaa_processing()
