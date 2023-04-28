@@ -11,22 +11,21 @@
 #              Landsat: Re-project into NOAA Polar Stereographic Projection, output as .TIF file
 #
 #
-# USER INFORMATION #
+# USER INFORMATION
 #
 # File:                 preprocessing.py
 # Synopsis:             python preprocessing.py process_noaa[yes/no] process_landsat[yes/no] main_data_path[C:\Users\..]
 #                       Example:
 #                       python preprocessing.py yes yes C:\Users\efrey\Desktop\data
 #
-#
 # Folder structure:    Main folder\NOAA\input\film\"NOAA year folders"
 #                      Main folder\Landsat\input\"Landsat scene folders"
 #                      Example:
 #                      C:\Users\efrey\Desktop\data\NOAA\input\film\1973_03
 #                      C:\Users\efrey\Desktop\data\Landsat\input\LM01_L1TP_037022_19730130_20200909_02_T2
-#
-########################################################################################################################
-# SCRIPT CODE: #
+
+
+""" Preprocess NOAA and Landsat-1 imagery """
 
 import os
 import sys
