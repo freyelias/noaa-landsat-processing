@@ -112,15 +112,16 @@ def reproject_landsat(input_landsat):
             with rasterio.vrt.WarpedVRT(src, crs=src_crs) as vrt:
                 rds = rioxarray.open_rasterio(vrt)
                 rds = rds.rio.reproject(dst_crs=noaa_crs)
-                output_landsat = os.path.join(create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4]
-                                              + "_REPROJ.TIF")
-                time_str = os.path.basename(input_landsat).split('_')[3]
-                time_str = str(time_str[0:4] + '-' + time_str[4:6] + '-' + time_str[6:8])
+                time_str = os.path.basename(input_landsat).split('_')[3]  # Gets LS conv. date from file (e.g. 19730101)
+                time_str = str(time_str[0:4] + '-' + time_str[4:6] + '-' + time_str[6:8])  # Assemble to common dt form.
+                # Convert to UNIX time format
                 ls_time = int(time.mktime(datetime.datetime.strptime(time_str, '%Y-%m-%d').timetuple()))
+                rds.attrs['time'] = ls_time  # Assign UNIX time information to raster attribute
                 rds.attrs['valid_min'] = 1  # Correct noaa max valid attribute
                 rds.attrs['valid_max'] = 255  # Correct noaa max valid attribute
-                rds.attrs['time'] = ls_time
-                rds = rds.rio.write_nodata(0, inplace=True)  # assign nodata
+                rds = rds.rio.write_nodata(0, inplace=True)  # Assign nodata
+                output_landsat = os.path.join(create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4]
+                                              + "_REPROJ.TIF")
             rds.rio.to_raster(output_landsat)
 
 
