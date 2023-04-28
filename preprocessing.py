@@ -1,4 +1,4 @@
-# Title: Script for NOAA and Landsat-1 preprocessing
+# Title: Script to preprocess NOAA and Landsat-1 scenes
 # Author: Elias Frey
 # Date: 27.04.23
 # -*- coding: utf-8 -*-
