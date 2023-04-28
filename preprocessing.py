@@ -8,17 +8,9 @@
 #
 # Description: This script processes NOAA and Landsat-1 scenes;
 #              NOAA: Convert to TIF and reassign proper NOAA Polar Stereographic Projection, output as .TIF file
-#              Landsat: Re-projection into NOAA Polar Stereographic Projection, output as .TIF file
-
-import os
-import sys
-from pathlib import PurePath, Path
-import rasterio
-from rasterio.crs import CRS
-import rioxarray
-import pyproj
-from pyproj import CRS
-########################################################################################################################
+#              Landsat: Re-project into NOAA Polar Stereographic Projection, output as .TIF file
+#
+#
 # USER INFORMATION #
 #
 # File:                 preprocessing.py
@@ -35,6 +27,17 @@ from pyproj import CRS
 #
 ########################################################################################################################
 # SCRIPT CODE: #
+
+import os
+import sys
+import datetime
+import time
+from pathlib import PurePath, Path
+import rasterio
+from rasterio.crs import CRS
+import rioxarray
+import pyproj
+from pyproj import CRS
 
 
 def create_dir(input_scene, satellite):
@@ -63,11 +66,12 @@ def convert_to_tif(input_noaa):
         noaa_nc = rioxarray.open_rasterio(input_noaa)[2].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].rio.write_nodata(255, inplace=True)  # assign nodata
+        noaa_nc['vis_norm_remapped'].attrs['valid_min'] = 1  # Correct noaa max valid attribute
         noaa_nc['vis_norm_remapped'].attrs['valid_max'] = 255  # Correct noaa max valid attribute
         # Mask NOAA VIS band with flags, set nan values to 255 and change dtype to uint8
         noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].where(
-            noaa_nc['flag_remapped'] == 0).fillna(255).astype(dtype='uint8')
+            noaa_nc['flag_remapped'] == 0).fillna(0).astype(dtype='uint8')
+        noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].rio.write_nodata(0, inplace=True)  # assign nodata
         noaa_nc = noaa_nc.drop_vars('flag_remapped')
         output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-3] + "_Conv.TIF")
         noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
@@ -77,11 +81,11 @@ def convert_to_tif(input_noaa):
         noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].rio.write_nodata(32767, inplace=True)
         noaa_nc['calibrated_longwave_flux'].attrs['valid_max'] = 2000  # Correct noaa max valid attribute
         # Mask NOAA IR band with flags, set nan values to 255 and change dtype to uint8
         noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].where(
-            noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='int16')
+            noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='uint16')
+        noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].rio.write_nodata(32767, inplace=True)
         noaa_nc = noaa_nc.drop_vars(['flag_remapped', 'OLR_longwave_flux', 'IR_count_remapped'])
         output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-3] + "_Conv.TIF")
         noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
@@ -90,7 +94,7 @@ def convert_to_tif(input_noaa):
 
 
 def reproject_landsat(input_landsat):
-    """ Reproject Landsat-1 to NOAA Polar Stereographic with proj4string"""
+    """ Reproject Landsat-1 to NOAA Polar Stereographic with proj4string """
     # Create a pyproj CRS object from proj4string (proj4string according to NOAA documentation)
     p_crs = pyproj.CRS("+proj=stere +lat_0=90 +lon_0=-80.0 +lat_ts=90 +x_0=0 +y_0=0 +ellps=sphere +units=m +R=6371128")
     noaa_crs = CRS.from_wkt(p_crs.to_wkt())
@@ -111,7 +115,14 @@ def reproject_landsat(input_landsat):
                 rds = rds.rio.reproject(dst_crs=noaa_crs)
                 output_landsat = os.path.join(create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4]
                                               + "_REPROJ.TIF")
-                rds.rio.to_raster(output_landsat)
+                time_str = os.path.basename(input_landsat).split('_')[3]
+                time_str = str(time_str[0:4] + '-' + time_str[4:6] + '-' + time_str[6:8])
+                ls_time = int(time.mktime(datetime.datetime.strptime(time_str, '%Y-%m-%d').timetuple()))
+                rds.attrs['valid_min'] = 1  # Correct noaa max valid attribute
+                rds.attrs['valid_max'] = 255  # Correct noaa max valid attribute
+                rds.attrs['time'] = ls_time
+                rds = rds.rio.write_nodata(0, inplace=True)  # assign nodata
+            rds.rio.to_raster(output_landsat)
 
 
 def mask_landsat(input_landsat):
