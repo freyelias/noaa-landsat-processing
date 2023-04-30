@@ -69,8 +69,8 @@ def convert_to_tif(input_noaa):
             noaa_nc = rioxarray.open_rasterio(input_noaa)[2].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['vis_norm_remapped'].attrs['valid_min'] = 1  # Correct noaa max valid attribute
-        noaa_nc['vis_norm_remapped'].attrs['valid_max'] = 255  # Correct noaa max valid attribute
+        noaa_nc['vis_norm_remapped'].attrs['valid_min'] = 1  # Noaa max valid attribute
+        noaa_nc['vis_norm_remapped'].attrs['valid_max'] = 255  # Noaa max valid attribute
         # Mask NOAA VIS band with flags, set nan values to 255 and change dtype to uint8
         noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].where(
             noaa_nc['flag_remapped'] == 0).fillna(0).astype(dtype='uint8')
@@ -87,7 +87,8 @@ def convert_to_tif(input_noaa):
             noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['calibrated_longwave_flux'].attrs['valid_max'] = 2000  # Correct noaa max valid attribute
+        noaa_nc['calibrated_longwave_flux'].attrs['valid_min'] = 0  # Noaa min valid attribute
+        noaa_nc['calibrated_longwave_flux'].attrs['valid_max'] = 2000  # Noaa max valid attribute
         # Mask NOAA IR band with flags, set nan values to 255 and change dtype to uint8
         noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].where(
             noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='uint16')
@@ -124,8 +125,8 @@ def reproject_landsat(input_landsat):
                 # Convert to UNIX time format
                 ls_time = int(time.mktime(datetime.datetime.strptime(time_str, '%Y-%m-%d').timetuple()))
                 rds.attrs['time'] = ls_time  # Assign UNIX time information to raster attribute
-                rds.attrs['valid_min'] = 1  # Correct noaa max valid attribute
-                rds.attrs['valid_max'] = 255  # Correct noaa max valid attribute
+                rds.attrs['valid_min'] = 1  # Noaa max valid attribute
+                rds.attrs['valid_max'] = 255  # Noaa max valid attribute
                 rds = rds.rio.write_nodata(0, inplace=True)  # Assign nodata
                 output_landsat = os.path.join(create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4]
                                               + "_REPROJ.TIF")
