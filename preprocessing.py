@@ -206,11 +206,6 @@ if __name__ == '__main__':
         print('INPUT ERROR: process_NOAA, process_landsat and main data path as commandline arguments')
         sys.exit(1)
 
-    # ... and suppress errors
-    #gdal.PushErrorHandler('CPLQuietErrorHandler')
-    #log = logging.getLogger()
-    #log.setLevel(logging.DEBUG)
-
     if 'y' in process_noaa and 'y' in process_landsat:
         noaa_processing()
         landsat_processing()
