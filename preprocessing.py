@@ -176,7 +176,7 @@ def landsat_processing():
         # Check and list files
         root, dirs, files = next(os.walk(folder, topdown=True))
         scenes = [os.path.join(root, s) for s in files if '.TIF' in s]
-        scenes[0], scenes[5] = scenes[5], scenes[0]
+        scenes[0], scenes[5] = scenes[5], scenes[0]  # Only needed for windwos, Mac has other sorting technique!
         for scene in scenes:
             print(f'Processing Landsat-1 scene:')
             print(f'{os.path.basename(scene)}')
