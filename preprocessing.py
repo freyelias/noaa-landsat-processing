@@ -32,6 +32,7 @@ import sys
 import datetime
 import time
 from pathlib import PurePath, Path
+import platform
 import rasterio
 from rasterio.crs import CRS
 import warnings
@@ -87,7 +88,7 @@ def convert_to_tif(input_noaa):
             noaa_nc = rioxarray.open_rasterio(input_noaa)[1].drop_dims('band')
         noaa_crs = CRS.from_cf(noaa_nc.crs.attrs)  # Extract CRS with pyproj library
         noaa_nc = noaa_nc.rio.write_crs(noaa_crs.to_string(), inplace=True)  # Assign found CRS to NOAA file
-        noaa_nc['calibrated_longwave_flux'].attrs['valid_min'] = 0  # Noaa min valid attribute
+        noaa_nc['calibrated_longwave_flux'].attrs['valid_min'] = 0  # Noaa max valid attribute
         noaa_nc['calibrated_longwave_flux'].attrs['valid_max'] = 2000  # Noaa max valid attribute
         # Mask NOAA IR band with flags, set nan values to 255 and change dtype to uint8
         noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].where(
@@ -176,7 +177,9 @@ def landsat_processing():
         # Check and list files
         root, dirs, files = next(os.walk(folder, topdown=True))
         scenes = [os.path.join(root, s) for s in files if '.TIF' in s]
-        scenes[0], scenes[5] = scenes[5], scenes[0]  # Only needed for windwos, Mac has other sorting technique!
+        # Rearrange scenes order (process quality flag first) on Windows
+        if platform.system() == 'Windows':
+            scenes[0], scenes[5] = scenes[5], scenes[0]
         for scene in scenes:
             print(f'Processing Landsat-1 scene:')
             print(f'{os.path.basename(scene)}')
