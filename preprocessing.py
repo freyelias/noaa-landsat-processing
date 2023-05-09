@@ -178,7 +178,7 @@ def landsat_processing():
         root, dirs, files = next(os.walk(folder, topdown=True))
         scenes = [os.path.join(root, s) for s in files if '.TIF' in s]
         # Rearrange scenes order (process quality flag first) on Windows
-        @TODO check Linux sorting mechanics
+        @ TODO check Linux sorting mechanics
         if platform.system() == 'Windows':
             scenes[0], scenes[5] = scenes[5], scenes[0]
         for scene in scenes:
