@@ -6,7 +6,8 @@
 # Copyright (c) 2023 RSGB/UniBe (Remote Sensing Research Group, University of Bern)
 #
 #
-# Description: This script processes NOAA and Landsat-1 scenes;
+# Description: This script pre-processes NOAA and Landsat-1 scenes by applying QA masks, reproject to same projection,
+#              align pixel values and convert to Tagged Image File Format (.tif) depending on the scene type;
 #              NOAA: Convert to TIF and reassign proper NOAA Polar Stereographic Projection, output as .TIF file
 #              Landsat: Re-project into NOAA Polar Stereographic Projection, output as .TIF file
 #
@@ -14,15 +15,16 @@
 # USER INFORMATION
 #
 # File:                 preprocessing.py
-# Synopsis:             python preprocessing.py process_noaa[yes/no] process_landsat[yes/no] main_data_path[C:\Users\..]
+# Synopsis:             python preprocessing.py main_data_path[C:\Users\...]
 #                       Example:
-#                       python preprocessing.py yes yes C:\Users\efrey\Desktop\main_folder
+#                       python preprocessing.py C:\Users\user\Desktop\main_folder
+#                       --> While running, user will be asked: preprocess noaa [yes/no] and preprocess landsat [yes/no]?
 #
 # Folder structure:    Main folder\NOAA\input\film\"NOAA year folders"
-#                      Main folder\Landsat\input\"Landsat scene folders"
+# (has to match!)      Main folder\Landsat\input\"Landsat scene folders"
 #                      Example:
-#                      C:\Users\efrey\Desktop\data\NOAA\input\film\1973_03
-#                      C:\Users\efrey\Desktop\data\Landsat\input\LM01_L1TP_037022_19730130_20200909_02_T2
+#                      C:\Users\user\Desktop\data\NOAA\input\film\1973_03
+#                      C:\Users\user\Desktop\data\Landsat\input\LM01_L1TP_037022_19730130_20200909_02_T2
 
 
 """ Preprocess NOAA and Landsat-1 imagery """
@@ -42,7 +44,12 @@ from pyproj import CRS
 
 
 def create_dir(input_scene, satellite):
-    """ Create output folder structure """
+    """
+    Create output folder structure
+    :param input_scene:
+    :param satellite:
+    :return:
+    """
     if satellite == 'noaa':
         out_dir_noaa = os.path.join(noaa_data_path, 'output', 'film', PurePath(input_scene).name.split('.')[5] + '_' +
                                     PurePath(input_scene).name.split('.')[6])
@@ -61,7 +68,11 @@ def create_dir(input_scene, satellite):
 
 
 def convert_to_tif(input_noaa):
-    """ Convert NOAA netCDF to raster TIF file """
+    """
+    Convert NOAA netCDF to raster TIF file
+    :param input_noaa: Input NOAA scene
+    :return:
+    """
     if 'VIS' in os.path.basename(input_noaa):
         # Ignore rasterio NotGeoreferencedWarning when opening raw NOAA netCDF file
         with warnings.catch_warnings():
@@ -77,8 +88,8 @@ def convert_to_tif(input_noaa):
             noaa_nc['flag_remapped'] == 0).fillna(0).astype(dtype='uint8')
         noaa_nc['vis_norm_remapped'] = noaa_nc['vis_norm_remapped'].rio.write_nodata(0, inplace=True)  # assign nodata
         noaa_nc = noaa_nc.drop_vars('flag_remapped')
-        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-3] + "_Conv.TIF")
-        noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
+        noaa_nc = noaa_nc.isel(time=0)
+        return noaa_nc
 
     elif 'IRday' in os.path.basename(input_noaa):
         # Ignore rasterio NotGeoreferencedWarning when opening raw NOAA netCDF file
@@ -95,8 +106,9 @@ def convert_to_tif(input_noaa):
             noaa_nc['flag_remapped'] == 0).fillna(32767).astype(dtype='uint16')
         noaa_nc['calibrated_longwave_flux'] = noaa_nc['calibrated_longwave_flux'].rio.write_nodata(32767, inplace=True)
         noaa_nc = noaa_nc.drop_vars(['flag_remapped', 'OLR_longwave_flux', 'IR_count_remapped'])
-        output_noaa = os.path.join(create_dir(input_noaa, 'noaa'), os.path.basename(input_noaa)[:-3] + "_Conv.TIF")
-        noaa_nc.isel(time=0).rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
+        noaa_nc = noaa_nc.isel(time=0)
+
+        return noaa_nc
     else:
         print(f'Error in function "convert_to_tif": VIS or IRday not found in filename: {os.path.basename(input_noaa)}')
 
@@ -129,9 +141,8 @@ def reproject_landsat(input_landsat):
                 rds.attrs['valid_min'] = 1  # Noaa max valid attribute
                 rds.attrs['valid_max'] = 255  # Noaa max valid attribute
                 rds = rds.rio.write_nodata(0, inplace=True)  # Assign nodata
-                output_landsat = os.path.join(create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4]
-                                              + "_REPROJ.TIF")
-            rds.rio.to_raster(output_landsat)
+
+            return rds
 
 
 def mask_landsat(input_landsat):
@@ -145,9 +156,8 @@ def mask_landsat(input_landsat):
     ls_mask_qa = rioxarray.open_rasterio(ls_mask_qa_name)
     # Filter Landsat-1 scene where QA equals 0 and fill nan values with 0 to be dtype 'uint8' compatible
     ls_masked = ls_scene.where(ls_mask_qa == 0).fillna(0).astype(dtype='uint8')
-    output_landsat = os.path.join(
-        create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4] + "_MASKED.TIF")
-    ls_masked.rio.to_raster(output_landsat)
+
+    return ls_masked
 
 
 def noaa_processing():
@@ -163,7 +173,9 @@ def noaa_processing():
             print(f'Processing NOAA scene:')
             print(f'{os.path.basename(scene)}')
             # Apply noaa converting function on each scene
-            convert_to_tif(scene)
+            scene_tif = convert_to_tif(input_noaa=scene)
+            output_noaa = os.path.join(create_dir(scene, 'noaa'), os.path.basename(scene)[:-3] + "_Conv.TIF")
+            scene_tif.rio.to_raster(output_noaa)  # Convert and save NOAA netCDF file into TIF raster file
             print(f'Successfully finished scene!')
     print(f'NOAA processing finished!')
 
@@ -178,18 +190,23 @@ def landsat_processing():
         root, dirs, files = next(os.walk(folder, topdown=True))
         scenes = [os.path.join(root, s) for s in files if '.TIF' in s]
         # Rearrange scenes order (process quality flag first) on Windows
-        @ TODO check Linux sorting mechanics
         if platform.system() == 'Windows':
             scenes[0], scenes[5] = scenes[5], scenes[0]
         for scene in scenes:
             print(f'Processing Landsat-1 scene:')
             print(f'{os.path.basename(scene)}')
             # Apply landsat re-projecting function on each scene
-            reproject_landsat(scene)
+            landsat_reproj = reproject_landsat(input_landsat=scene)
+            output_landsat = os.path.join(create_dir(input_scene=scene, satellite='landsat'),
+                                          os.path.basename(scene)[:-4] + "_REPROJ.TIF")
+            landsat_reproj.rio.to_raster(output_landsat)
             # Mask only band data
             if 'QA' not in scene:
                 # Apply landsat QA (reprojected) masking function on each scene
-                mask_landsat(scene)
+                landsat_masked = mask_landsat(input_landsat=scene)
+                output_landsat = os.path.join(
+                    create_dir(input_landsat, 'landsat'), os.path.basename(input_landsat)[:-4] + "_MASKED.TIF")
+                landsat_masked.rio.to_raster(output_landsat)
             # create_dir(scene, 'landsat')
             print(f'Successfully finished scene!')
     print('Landsat-1 processing finished!')
@@ -199,9 +216,9 @@ if __name__ == '__main__':
     try:
         # Check if user input is correct (synopsis in description)
         print('Pre-processing script for NOAA and Landsat-1 scenes.')
-        process_noaa = sys.argv[1]
-        process_landsat = sys.argv[2]
-        data_path = Path(sys.argv[3])
+        data_path = Path(sys.argv[1])
+        process_noaa = Input(f'Preprocess NOAA scenes? Input ["y"] for yes or ["n"] for no')
+        process_landsat = Input(f'Preprocess Landsat scenes? Input ["y"] for yes or ["n"] for no')
         # Define NOAA and Landsat paths
         noaa_data_path = os.path.join(data_path, 'NOAA')
         landsat_data_path = os.path.join(data_path, 'Landsat')
@@ -210,15 +227,15 @@ if __name__ == '__main__':
         print('INPUT ERROR: process_NOAA, process_landsat and main data path as commandline arguments')
         sys.exit(1)
 
-    if 'y' in process_noaa and 'y' in process_landsat:
+    if process_noaa == 'y' and process_landsat == 'y':
         noaa_processing()
         landsat_processing()
-    elif 'y' in process_noaa and 'n' in process_landsat:
+    if process_noaa == 'y' and process_landsat == 'n':
         noaa_processing()
-    elif 'y' in process_landsat and 'n' in process_noaa:
+    if process_noaa == 'n' and process_landsat == 'y':
         landsat_processing()
-    else:
-        print(f'Nothing to process with: process_noaa = {process_noaa} and process_landsat = {process_landsat} ... '
-              f'Input ["yes" or "y"] for yes or ["no" or "n"] for no.')
-
-    print('Script done!')
+    if process_noaa != 'y' and process_noaa != 'y':
+        raise ValueError(f'Invalid input <{process_noaa}> for Landsat. Must be either ["y"] for yes or ["n"] for no')
+    if process_landsat != 'y' and process_landsat != 'y':
+        raise ValueError(f'Invalid input <{process_landsat}> for Landsat. Must be either ["y"] for yes or ["n"] for no')
+    print('Job done!')
