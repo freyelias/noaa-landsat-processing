@@ -7,5 +7,5 @@ NOAA: Convert to TIF and reassign proper NOAA Polar Stereographic Projection, ou
 Landsat: Re-project into NOAA Polar Stereographic Projection, output as .TIF file
 
 #### Files:
-##### preprocessing.py: NOAA and Landsat-1 preprocessing (CRS assignment, reprojection, masking)
-##### preprocessing_environment.yml: Conda environment for NOAA and Landsat-1 preprocessing
+**preprocessing.py:** NOAA and Landsat-1 preprocessing (CRS assignment, reprojection, masking)
+**preprocessing_environment.yml:** Conda environment for NOAA and Landsat-1 preprocessing
